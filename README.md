@@ -1,8 +1,14 @@
+# 🛢️ Mini Dashboard Test
+
+## 🚀 Запуск
+```bash
 npm i
 npm run dev
 src/
-├── store/uiStore.ts     # 🏪 Zustand: filters, pagination, theme+persist
-├── lib/queryClient.ts   # 🔗 Singleton QueryClient  
-├── Dashboard.tsx        # 📊 UI + hooks + виртуализация
-├── theme.ts             # 🎨 light/dark styled-components
-└── styled.d.ts          # 🔧 TS типы для theme
+├── store/uiStore.ts           # Zustand persist+selectors
+├── lib/queryClient.ts         # QueryClient singleton
+├── Dashboard.tsx              # Query+Virtualization+UI
+├── theme.ts                   # light/dark styled-components
+├── GlobalStyle.tsx            # Global CSS-in-JS
+├── styled.d.ts                # TS theme types
+└── App.tsx                    # QueryClientProvider
