@@ -12,3 +12,4 @@ src/
 ├── GlobalStyle.tsx            # Global CSS-in-JS
 ├── styled.d.ts                # TS theme types
 └── App.tsx                    # QueryClientProvider
+Заняло около 2 часов.
