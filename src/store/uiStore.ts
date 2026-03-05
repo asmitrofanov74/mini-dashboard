@@ -45,8 +45,8 @@ export const useUiStore = create<UiState>()(
 );
 
 export const useFilters = () => useUiStore((s) => s.filters);
-export const usePagination = () =>
-  useUiStore((s) => ({ page: s.page, pageSize: s.pageSize }));
 export const useTheme = () => useUiStore((s) => s.theme);
 export const useSetFilters = () => useUiStore((s) => s.setFilters);
 export const useSetPageSize = () => useUiStore((s) => s.setPageSize);
+export const usePage = () => useUiStore((s) => s.page);
+export const usePageSize = () => useUiStore((s) => s.pageSize);

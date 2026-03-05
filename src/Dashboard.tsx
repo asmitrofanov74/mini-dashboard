@@ -1,17 +1,19 @@
-import React, { useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useRef, useMemo, useState, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import styled, { ThemeProvider } from "styled-components";
 import {
   useFilters,
-  usePagination,
   useTheme,
   useUiStore,
   useSetFilters,
+  usePageSize,
   useSetPageSize,
 } from "./store/uiStore";
+import { useToggleTask } from "./api/useToggleTask";
 import { GlobalStyle } from "./GlobalStyle";
 import { lightTheme, darkTheme } from "./theme";
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
 
 const Container = styled.div`
   padding: 20px;
@@ -60,6 +62,12 @@ const TableBox = styled.div`
   border: 1px solid #ccc;
   overflow: auto;
 `;
+const Pagination = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  align-items: center;
+`;
 
 interface Task {
   id: number;
@@ -73,56 +81,72 @@ export default function Dashboard() {
   const filters = useFilters();
   const setFilters = useSetFilters();
   const setPageSize = useSetPageSize();
-  const { page, pageSize } = usePagination();
-  const queryClient = useQueryClient();
-  const TOTAL_ROWS = 5000;
-  const { data, isLoading } = useQuery<Task[]>({
-    queryKey: ["tasks", filters, page, pageSize],
+  const pageSize = usePageSize();
+  const toggleTask = useToggleTask();
 
-    queryFn: async (): Promise<Task[]> => {
-      await new Promise((r) => setTimeout(r, 500));
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
 
-      const start = (page - 1) * pageSize;
-      let allTasks: Task[] = Array.from({ length: TOTAL_ROWS }, (_, i) => ({
-        id: i + 1,
-        title: `Task ${i + 1} - Oil Dashboard`,
-        status: i % 3 === 0 ? "paused" : ("active" as const),
-      }));
+  useEffect(() => {
+    fetch("http://localhost:3001/tasks")
+      .then((res) => res.json())
+      .then((data: Task[]) => setTasks(data))
+      .catch(console.error);
+  }, []);
 
-      let filtered = allTasks;
-      if (filters.q)
-        filtered = filtered.filter((t) =>
-          t.title.toLowerCase().includes(filters.q.toLowerCase())
-        );
-      if (filters.status !== "all")
-        filtered = filtered.filter((t) => t.status === filters.status);
+  const filteredTasks = useMemo(() => {
+    let filtered = tasks;
+    if (filters.q) {
+      const q = filters.q.toLowerCase();
+      filtered = filtered.filter((t) => t.title.toLowerCase().includes(q));
+    }
+    if (filters.status !== "all") {
+      filtered = filtered.filter((t) => t.status === filters.status);
+    }
+    return filtered;
+  }, [tasks, filters.q, filters.status]);
 
-      const paginated: Task[] = filtered.slice(start, start + pageSize);
-      console.log(`📊 Mock: page=${page}, results=${paginated.length}`);
-      return paginated;
-    },
-  });
+  const paginatedTasks = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTasks.slice(start, start + pageSize);
+  }, [filteredTasks, currentPage, pageSize]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
-    count: data?.length ?? 0,
+    count: paginatedTasks.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 60,
     overscan: 5,
   });
 
-  console.log(
-    "Data length:",
-    data?.length,
-    "Visible:",
-    rowVirtualizer.getVirtualItems().length
-  ); // DEBUG
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.q, filters.status, pageSize]);
+
+  const toggleTaskStatus = (task: Task) => {
+    // Сразу обновляем локально
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === task.id
+          ? { ...t, status: t.status === "active" ? "paused" : "active" }
+          : t
+      )
+    );
+
+    // И отправляем на сервер
+    toggleTask.mutate({
+      ...task,
+      status: task.status === "active" ? "paused" : "active",
+    });
+  };
+
+  const totalPages = Math.ceil(filteredTasks.length / pageSize);
 
   return (
     <ThemeProvider theme={theme}>
       <GlobalStyle />
       <Container>
-        <h1>Dashboard (5000+ tasks)</h1>
+        <h1>Dashboard (Client-side Filter + Pagination)</h1>
         <Filters>
           <Input
             placeholder="Search"
@@ -154,73 +178,80 @@ export default function Dashboard() {
             {themeName === "light" ? "🌙 Dark" : "☀️ Light"}
           </Button>
         </Filters>
-
-        {isLoading ? (
-          <div>⏳ Loading...</div>
-        ) : (
-          <>
-            <Header>
-              <span>Title</span> <span>Status</span> <span>Action</span>
-            </Header>
-            <TableBox ref={parentRef}>
+        <Swiper spaceBetween={10} slidesPerView={4}>
+          {filteredTasks.slice(0, 20).map((task) => (
+            <SwiperSlide key={task.id}>
               <div
                 style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: "100%",
-                  position: "relative",
+                  padding: "10px",
+                  background: task.status === "active" ? "#a0f0a0" : "#ffcc00",
+                  borderRadius: "6px",
+                  textAlign: "center",
                 }}
               >
-                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const task = data![virtualRow.index];
-                  return (
-                    <div
-                      key={virtualRow.key}
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }}
-                    >
-                      <Row status={task.status}>
-                        <span>{task.title}</span>
-                        <span>{task.status.toUpperCase()}</span>
-                        <Button
-                          onClick={async () => {
-                            await fetch(
-                              `http://localhost:3001/tasks/${task.id}`,
-                              {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  status:
-                                    task.status === "active"
-                                      ? "paused"
-                                      : "active",
-                                }),
-                              }
-                            );
-                            queryClient.invalidateQueries({
-                              queryKey: ["tasks"],
-                            });
-                          }}
-                        >
-                          {task.status === "active" ? "⏸️ Pause" : "▶️ Active"}
-                        </Button>
-                      </Row>
-                    </div>
-                  );
-                })}
+                <strong>{task.title}</strong>
+                <div>{task.status.toUpperCase()}</div>
               </div>
-            </TableBox>
-            <div>
-              Page {page} | Size {pageSize} | Total ~5000 | Loaded:{" "}
-              {data?.length}
-            </div>
-          </>
-        )}
+            </SwiperSlide>
+          ))}
+        </Swiper>
+
+        <Header>
+          <span>Title</span> <span>Status</span> <span>Action</span>
+        </Header>
+        <TableBox ref={parentRef}>
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const task = paginatedTasks[virtualRow.index];
+              if (!task) return null;
+              return (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <Row status={task.status}>
+                    <span>{task.title}</span>
+                    <span>{task.status.toUpperCase()}</span>
+                    <Button onClick={() => toggleTaskStatus(task)}>
+                      {task.status === "active" ? "⏸️ Pause" : "▶️ Active"}
+                    </Button>
+                  </Row>
+                </div>
+              );
+            })}
+          </div>
+        </TableBox>
+
+        <Pagination>
+          <Button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            ← Prev
+          </Button>
+          <span>
+            Page {currentPage} of {totalPages} | Total: {filteredTasks.length}
+          </span>
+          <Button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next →
+          </Button>
+        </Pagination>
       </Container>
     </ThemeProvider>
   );
